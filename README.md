@@ -1,41 +1,60 @@
-📦 Promo Sensei
-A Slack bot that scrapes and summarizes the latest promotional offers from top brands using Playwright, OpenAI, and ChromaDB.
+# 📦 Promo Sensei
 
-🔍 Features
-Slash commands to:
+**Promo Sensei** is a powerful Slack bot that scrapes and summarizes the latest promotional offers from top brands using **Playwright**, **OpenAI**, and **ChromaDB**. Whether you're a deal hunter, marketer, or data enthusiast, Promo Sensei helps you stay ahead of the curve with real-time insights.
 
-Search current offers (/promosensei-search)
+---
 
-Summarize brand deals (/promosensei-summary)
+## 🔍 Features
 
-Filter by brand (/promosensei-brand Nike)
+✨ Slash commands to interact effortlessly within Slack:
+- `/promosensei-search` – 🔎 Search current promotional offers
+- `/promosensei-summary` – 📄 Get summarized brand deals
+- `/promosensei-brand Nike` – 🏷️ List offers filtered by brand
+- `/promosensei-refresh` – 🔁 Re-scrape and refresh offer data
 
-Refresh scraped data (/promosensei-refresh)
+🧠 Built-in intelligence:
+- Real-time web scraping with **Playwright**
+- Smart filtering and top offer ranking by **discount percentage**
+- Natural language understanding using **OpenAI embeddings**
+- Vector-based document retrieval with **ChromaDB**
 
-Real-time web scraping using Playwright
+💬 Seamless Slack integration:
+- Easy-to-use commands
+- Beautifully formatted responses with product names, prices, discounts, and direct links
 
-Vector storage with ChromaDB
+---
 
-Natural language querying via OpenAI embeddings
+## ⚙️ Tech Stack
 
-Clean offer ranking based on discount percentage
+| Tech        | Purpose                    |
+|-------------|----------------------------|
+| **Python**  | Core backend (FastAPI)     |
+| **Playwright** | Web scraping engine    |
+| **OpenAI**  | Text embeddings & summaries |
+| **ChromaDB** | Vector store for fast retrieval |
+| **Slack API** | Bot commands & integration |
 
-Easy Slack integration for quick access
+---
 
-⚙️ Tech Stack
-Python (FastAPI)
+## 🚀 Use Cases
 
-Playwright (Web scraping)
+- 💼 **Marketing teams** tracking competitor deals
+- 📊 **Analytics** on pricing trends across brands
+- 🛒 **Shoppers** hunting top discounted items
+- 🤖 Building real-time **offer aggregation bots**
 
-OpenAI (Embeddings + summaries)
+---
 
-ChromaDB (Vector store)
+## 🛠️ Getting Started
 
-Slack API (Slash commands)
+```bash
+# 1. Clone the repo
+git clone https://github.com/your-username/promo-sensei.git
 
-🚀 Use Cases
-Marketing and analytics teams looking for brand-wise deal tracking
+# 2. Install dependencies
+pip install -r requirements.txt
 
-Competitor price monitoring
+# 3. Run FastAPI backend
+uvicorn app:app --reload
 
-Real-time offer aggregation bots
+# 4. Configure Slack bot & slash commands (see docs/)
