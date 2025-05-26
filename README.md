@@ -51,10 +51,4 @@
 # 1. Clone the repo
 git clone https://github.com/your-username/promo-sensei.git
 
-# 2. Install dependencies
-pip install -r requirements.txt
 
-# 3. Run FastAPI backend
-uvicorn app:app --reload
-
-# 4. Configure Slack bot & slash commands (see docs/)
