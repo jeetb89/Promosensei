@@ -14,7 +14,6 @@ from rag_query import (
 )
 import validators
 
-# Load environment variables from .env file
 load_dotenv()
 
 # Set up logging
