@@ -1,0 +1,82 @@
+tools:
+  answer-question:
+    name: "🤖 Answer Question"
+    description: "Ask a question and the bot will find the answer for you."
+    labels: [question, answer]
+  quick-task:
+    name: "🚀 Quick Task"
+    description: "Ask the bot to perform a task for you using its capabilities."
+    labels: []
+  generate-automation:
+    name: "🧙‍♂️ Generate Automation"
+    description: "Generates a new Automation tailored to your project's needs."
+    labels: [generate, automation, meta]
+  generate-tool:
+    name: "🧙‍♂️ Generate Tool"
+    description: "Generates a new Tool tailored to your project's needs."
+    labels: [generate, tool, meta]
+  import-workflow:
+    name: "🔄 Import Workflow"
+    description: "Install a Smart Workflow into your project with the click of a button."
+    labels: [import, workflow, meta]
+  quick-code-change:
+    name: "🛠 Quick Code Change"
+    description: "Facilitate quick code modifications through an AI agent based on user inputs."
+    labels: [code, modify, ai]
+  write-user-story:
+    name: "✍️ Write User Story"
+    description: "Generate comprehensive user stories for your code base."
+    labels: [user-story, best-practices, product]
+  write-technical-specification:
+    name: "✍️ Write Technical Specification"
+    description: "Generates technical specifications based on user stories through an AI agent."
+    labels: [specification, user-story, ai]
+  draw-diagram:
+    name: "📊 Draw Diagram"
+    description: "Fenerate Mermaid diagrams based on the repository's code and files."
+    labels: [diagram, visualize]
+  initialize-project:
+    name: "🚀 Initialize Project"
+    description: "Assist users in setting up a new project by generating a Github issue with concise, actionable instructions and a list of files to be created, based on the specified programming language and optional framework."
+    labels: [initialize, project, setup]
+automations:
+  format-issue:
+    name: "📝 Format and Label New Issues"
+    description: "Automatically format and label new issues."
+    labels: [issues, format, label]
+  chat-bot:
+    name: "🤖 Chat Bot"
+    description: "Turn any issue into a chat with the bot by adding the `chat` label."
+    labels: [chat, label, comment, issues]
+  pr-auto-review:
+    name: "🔍 PR Auto Review"
+    description: "Automatically review new pull requests."
+    labels: [review, pr, code-quality]
+  investigate-bug:
+    name: "🐞 Investigate Bug"
+    description: "Automatically investigates issues labeled as `bug` by analyzing the codebase and providing suggestions."
+    labels: [bug, investigate, code-analysis]
+  help-with-documentation:
+    name: "📚 Help with Documentation"
+    description: "Automatically assists with documentation tasks when the `needs-documentation` label is added to an issue."
+    labels: [documentation, help, automate]
+  refine-issue:
+    name: "🔍 Refine Issue"
+    description: "Automatically refines issues labeled with `needs-refinement` by analyzing the issue description, searching the codebase for related files, and enhancing the issue with relevant context and acceptance criteria."
+    labels: [refinement, context, criteria]
+  help-with-implementation:
+    name: "🛠 Help with Implementation"
+    description: "Automatically assists with implementation tasks when the `needs-work` label is added to an issue by reading the issue, understanding the requirements, searching for related files, and writing the necessary changes."
+    labels: [implementation, code-change, automate]
+  enforce-contribution-guidelines:
+    name: "📐 Enforce Contribution Guidelines"
+    description: "Automatically ensures that new pull requests adhere to the project's contribution guidelines."
+    labels: [contribution, guidelines, pr]
+  work-on-todo-list:
+    name: "📋 Work on TODO List"
+    description: "Automatically works on items listed in the TODO.md file when updated on the main branch. If all items are completed, it deletes the TODO.md file."
+    labels: [todo, automate, task]
+  product-owner:
+    name: "👩‍💼 Product Owner"
+    description: "Acts as a virtual Product Owner, modifying issues labeled with `feature-request` to include structured sections for user story, functional and non-functional requirements, and out of scope."
+    labels: [feature-request, user-story, requirements]
