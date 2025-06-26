@@ -1,0 +1,39 @@
+name: "📝 Format and Label New Issues"
+
+# Triggers the workflow on new issue creation
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  format-issue:
+    runs-on: ubuntu-latest
+    outputs:
+      task-url: ${{ steps.format.outputs.task-url }}
+    steps:
+      - name: Format GitHub Issue
+        id: format
+        uses: PR-Pilot-AI/smart-actions/format-issue@v1
+        with:
+
+          # API key for PR Pilot must be defined as a secret in the repository
+          api-key: ${{ secrets.PR_PILOT_API_KEY }}
+
+          # Number of the issue to be formatted
+          issue-number: ${{ github.event.issue.number }}
+
+          # Instructions for formatting the issue
+          formatting-instructions: |
+            All issues should be properly Markdown-formatted:
+            * File paths and code identifiers should be enclosed in backticks
+            * Code blocks should be enclosed in triple backticks
+            * Issue titles should be concise, descriptive and start with an appropriate emoji (UTF-8 character)
+            
+            Every issue should have at least one label. Only the following labels are allowed:
+            * `bug` - for bugs
+            * `enhancement` - for feature requests
+            * `question` - for questions
+            * `documentation` - for documentation-related tasks
+            
+            It is IMPORTANT that you do not alter the existing content of the issue body, only the formatting.
+
