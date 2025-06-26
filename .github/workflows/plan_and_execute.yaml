@@ -1,0 +1,57 @@
+name: "🚀 Plan and Execute"
+
+on:
+  workflow_dispatch:
+    inputs:
+      high-level-task:
+        description: 'What should the agent plan and execute?'
+        required: true
+      goal:
+        description: 'What is the goal of the task?'
+        required: true
+
+jobs:
+  execute-and-plan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create a step-by-step plan
+        id: create-plan
+        uses: PR-Pilot-AI/smart-actions/quick-task@v1
+        with:
+          api-key: ${{ secrets.PR_PILOT_API_KEY }}
+          sdk-version: 1.3.1
+          agent-instructions: |
+            The user wants you to create a step-by-step plan for the following:
+            
+            ```
+            ${{ github.event.inputs.high-level-task }}
+            ```
+            
+            The goal of the task is:
+            ${{ github.event.inputs.goal }}
+            
+            The plan will later be executed by you, so make sure it is within your capabilities.
+            The plan should:
+            - Be clear and concise and use imperative language
+            
+            The following should NOT be part of the plan:
+            - Any action that requires user input
+            - Any action that requires executing scripts or code
+            - Any action that requires testing or validation
+            
+            Create the plan.
+      - name: Execute the plan
+        id: execute-plan
+        uses: PR-Pilot-AI/smart-actions/quick-task@v1
+        with:
+          api-key: ${{ secrets.PR_PILOT_API_KEY }}
+          sdk-version: 1.3.1
+          agent-instructions: |
+            We have the following step-by-step plan for you to execute:
+            
+            ${{ steps.create-plan.outputs.task-result }}
+            
+            The goal of the task is:
+            ${{ github.event.inputs.goal }}
+            
+            Execute the plan to achieve the goal.
