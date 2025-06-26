@@ -1,97 +1,203 @@
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin
+import re
 import logging
+import traceback
+import unicodedata
+from embedding_utils import embed_text
 from typing import List, Dict
 from chromadb import Client
 from playwright.sync_api import sync_playwright, TimeoutError
-import re
-from embedding_utils import embed_text
+import hashlib
 
-logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+CURRENCY_SYMBOLS = ['₹', '$', '£', '€', 'Rs', 'USD', 'INR']
+
+def looks_like_price(text):
+    pattern = r"(" + "|".join(re.escape(sym) for sym in CURRENCY_SYMBOLS) + r")\s?[\d,.]+"
+    return re.search(pattern, text) is not None
+
+BAD_TITLE_KEYWORDS = [
+    'login', 'cart', 'seller', 'account', 'exploreplus', 'more', 'wishlist',
+    'category', 'categories', 'home', 'offers', 'deals', 'shop', 'brands',
+    'filters', 'sort', 'payment', 'shipping', 'return', 'about', 'sponsored',
+    'm.r.p', 'mrp', 'ad', 'you are seeing', 'let us know', 'price', 'buy now',
+    'free delivery', 'delivery'
+]
+
+def is_valid_title(title):
+    title = unicodedata.normalize("NFKD", title)
+    title_lower = title.lower()
+    if len(title) < 10:
+        return False
+    if any(word in title_lower for word in BAD_TITLE_KEYWORDS):
+        return False
+    if (title.isupper() or title.islower()) and len(title) < 15:
+        return False
+    return True
+
+def extract_product_candidates(soup):
+    candidates = []
+    for tag in soup.find_all(True):
+        link = tag.find('a', href=True)
+        if not link:
+            continue
+        text = tag.get_text(separator=" ", strip=True)
+        if text and looks_like_price(text):
+            candidates.append(tag)
+    logger.info(f"Found {len(candidates)} candidate product blocks")
+    return candidates
+
+def extract_discount(strings):
+    """
+    Look for discount percentage in the list of strings.
+    Examples:
+     - "20% OFF"
+     - "Save 15%"
+     - "Flat 30% discount"
+    Returns discount as a string like '20%' or '15%' or 'N/A' if not found.
+    """
+    discount_pattern = re.compile(r'(\d{1,3})\s?%')
+    for s in strings:
+        match = discount_pattern.search(s)
+        if match:
+            return match.group(1) + '%'
+    return 'N/A'
 
 
-def extract_price(price_str: str) -> float:
-    """Extracts numeric price from a string like '₹ 3 495.00'"""
+TOP_DISCOUNT_KEYWORDS = [
+    'top discount', 'best discount', 'hot deal', 'top offer', 'special discount', 'top saving', 'biggest discount', 'exclusive offer'
+]
+
+def has_top_discount_indicator(tag):
+    # Check tag text and classes for top discount indicators
+    text = tag.get_text(separator=" ", strip=True).lower()
+    if any(keyword in text for keyword in TOP_DISCOUNT_KEYWORDS):
+        return True
+    
+    # Also check class names for badges or discount labels
+    classes = " ".join(tag.get('class', [])).lower()
+    if any(keyword.replace(' ', '') in classes for keyword in TOP_DISCOUNT_KEYWORDS):
+        return True
+    
+    # Check direct child spans/divs for discount badges
+    for child in tag.find_all(['span', 'div']):
+        child_text = child.get_text(strip=True).lower()
+        if any(keyword in child_text for keyword in TOP_DISCOUNT_KEYWORDS):
+            return True
+    
+    return False
+
+def parse_product_block(tag, base_url):
     try:
-        return float(re.sub(r"[^\d.]", "", price_str.replace(",", "")))
-    except:
-        return 0.0
+        # Prefer heading tags or anchors with meaningful text for title
+        possible_title = None
+        for el in tag.find_all(['h1','h2','h3','h4','h5','h6','a']):
+            text = el.get_text(strip=True)
+            if text and is_valid_title(text):
+                possible_title = text
+                break
 
-def scrape_nike_offers() -> List[Dict]:
-    offers = []
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
+        if not possible_title:
+            texts = [t.strip() for t in tag.stripped_strings if is_valid_title(t)]
+            possible_title = max(texts, key=len) if texts else "Unknown product"
 
-            # Block unnecessary resources
-            page.route("**/*", lambda route, request: route.abort()
-                       if request.resource_type in ["image", "font", "stylesheet"]
-                       else route.continue_())
+        price = 'N/A'
+        for string in tag.stripped_strings:
+            if looks_like_price(string):
+                price = string
+                break
 
-            page.goto("https://www.nike.com/in/w/sale", timeout=60000)
-            page.wait_for_selector("div.product-card", timeout=15000)
+        all_texts = list(tag.stripped_strings)
+        discount = extract_discount(all_texts)
 
-            scroll_to_bottom_until_all_loaded(page)
+        a_tag = tag.find('a', href=True)
+        link = urljoin(base_url, a_tag['href']) if a_tag else 'N/A'
 
-            cards = page.locator("div.product-card")
-            count = cards.count()
+        store_name = "N/A"
+        for cls in ['store', 'seller', 'brand', 'shop']:
+            store_tag = tag.find(class_=re.compile(cls, re.I))
+            if store_tag and store_tag.get_text(strip=True):
+                store_name = store_tag.get_text(strip=True)
+                break
 
-            for i in range(count):
-                card = cards.nth(i)
-                try:
-                    title = card.locator("div.product-card__title").inner_text()
+        if store_name == "N/A":
+            candidates = []
+            for el in tag.find_all(['span','div']):
+                text = el.get_text(strip=True)
+                if text and len(text) < 30 and not re.search(r'\d', text) and all(c.isalnum() or c.isspace() for c in text):
+                    candidates.append(text)
+            if candidates:
+                store_name = sorted(candidates, key=len)[0]
 
-                    subtitle = ""
-                    subtitle_locator = card.locator("div.product-card__subtitle")
-                    if subtitle_locator.count() > 0:
-                        subtitle = subtitle_locator.nth(0).inner_text()
+        # Detect top discount badge
+        top_discount = "Yes" if has_top_discount_indicator(tag) else "No"
 
-                    current_price_locator = card.locator('div[data-testid="product-price-reduced"], div.product-price.is--current-price')
-                    current_price = current_price_locator.nth(0).inner_text() if current_price_locator.count() > 0 else ""
-
-                    original_price_locator = card.locator('div[data-testid="product-price"], div.product-price.in__styling')
-                    original_price = original_price_locator.nth(0).inner_text() if original_price_locator.count() > 0 else current_price
-
-                    cp = extract_price(current_price)
-                    op = extract_price(original_price)
-                    discount = round((1 - (cp / op)) * 100, 2) if op > cp and op > 0 else 0.0
-
-                    link = card.locator("a.product-card__link-overlay").get_attribute("href")
-
-                    offers.append({
-                        "title": title.strip(),
-                        "description": subtitle.strip(),
-                        "current_price": current_price.strip(),
-                        "original_price": original_price.strip(),
-                        "discount": discount,
-                        "brand": "Nike",
-                        "category": "Footwear",
-                        "expiry": "N/A",
-                        "link": link or "https://www.nike.com/in/w/sale",
-                    })
-                except Exception as e:
-                    logger.warning(f"Skipping a product card at index {i} due to error: {e}")
-                    continue
-
-            browser.close()
+        return {
+            'title': possible_title.strip(),
+            'price': price.strip(),
+            'discount': discount,
+            'link': link,
+            'brand': store_name.strip(),
+            'top_discount': top_discount
+        }
     except Exception as e:
-        logger.error(f"Error scraping Nike offers: {e}")
-    return offers
+        logger.debug(f"Failed to parse product block: {e}")
+        return None
 
+def scrape_generic_offers(url: str, headful=False, screenshot_path=None):
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=not headful)
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+            viewport={'width': 1280, 'height': 800}
+        )
+        page = context.new_page()
+        try:
+            logger.info(f"Visiting: {url}")
+            page.goto(url, timeout=60000, wait_until="domcontentloaded")
 
-def scroll_to_bottom_until_all_loaded(page, max_scrolls=50):
-    prev_count = 0
-    for i in range(max_scrolls):
-        page.evaluate("window.scrollTo(0, document.body.scrollHeight);")
-        page.wait_for_timeout(2000)  # Wait for lazy-loaded content
+            # Wait until at least 3 price-like elements appear
+            page.wait_for_function("""
+                () => {
+                    return Array.from(document.querySelectorAll("*")).filter(el => {
+                        return /₹|\\$|Rs|INR|USD/.test(el.innerText);
+                    }).length > 3;
+                }
+            """, timeout=15000)
 
-        curr_count = page.locator("div.product-card").count()
-        logger.debug(f"Scroll {i+1}: Product count = {curr_count}")
+            if screenshot_path:
+                page.screenshot(path=screenshot_path)
+                logger.info(f"Saved screenshot to {screenshot_path}")
 
-        if curr_count == prev_count:
-            logger.info("Reached bottom of page, no new products loaded.")
-            break
-        prev_count = curr_count
+            content = page.content()
+            soup = BeautifulSoup(content, "html.parser")
+
+            candidates = extract_product_candidates(soup)
+            offers = []
+            seen = set()
+
+            for tag in candidates:
+                offer = parse_product_block(tag, url)
+                if not offer:
+                    continue
+                key = (offer['title'], offer['price'], offer['link'])
+                if key not in seen and offer['price'] != 'N/A' and is_valid_title(offer['title']):
+                    offers.append(offer)
+                    seen.add(key)
+
+            logger.info(f"Scraped {len(offers)} unique offers from {url}")
+            for offer in offers:
+                print("🔹", offer)
+            push_to_chroma(offers)
+            return offers
+        except Exception as e:
+            logger.error(f"Failed to scrape {url}: {e}\n{traceback.format_exc()}")
+        finally:
+            browser.close()
+
 
 
 def push_to_chroma(offers: List[Dict], collection_name="promotions") -> None:
@@ -108,29 +214,55 @@ def push_to_chroma(offers: List[Dict], collection_name="promotions") -> None:
         embeddings = []
         ids = []
 
-        for idx, offer in enumerate(offers):
-            text = f"{offer['title']} - {offer['description']} - Price: {offer.get('current_price', '')}"
+        for offer in offers:
+            text = f"{offer['title']} from {offer['brand']} - Price: {offer['price']}, Discount: {offer['discount']}"
             embedding = embed_text(text)
-            texts.append(text)
-           
-            metadatas.append({
-        "brand": offer["brand"],
-        "category": offer["category"],
-        "expiry": offer["expiry"],
-        "link": offer["link"],
-        "current_price": offer["current_price"],    # Add current price string
-        "original_price": offer["original_price"],  # Optional: also original price
-        "discount":offer["discount"],
-      })
-            embeddings.append(embedding)
-            ids.append(f"offer-{idx}")
+            offer_id = hashlib.md5(f"{offer['title']}_{offer['price']}_{offer['link']}".encode()).hexdigest()
 
-        collection.add(
-            documents=texts,
-            metadatas=metadatas,
-            embeddings=embeddings,
-            ids=ids,
-        )
-        logger.info(f"✅ Successfully pushed {len(offers)} offers to ChromaDB.")
+            texts.append(text)
+            embeddings.append(embedding)
+            ids.append(offer_id)
+            metadatas.append({
+                "title": offer["title"],
+                "price": offer["price"],
+                "discount": offer["discount"],
+                "link": offer["link"],
+                "brand": offer["brand"],
+                "top_discount": offer["top_discount"]
+            })
+
+        existing = set(collection.get(ids=ids)["ids"])
+        new_indices = [i for i, doc_id in enumerate(ids) if doc_id not in existing]
+
+        if new_indices:
+            collection.add(
+                documents=[texts[i] for i in new_indices],
+                metadatas=[metadatas[i] for i in new_indices],
+                embeddings=[embeddings[i] for i in new_indices],
+                ids=[ids[i] for i in new_indices],
+            )
+            logger.info(f"✅ Added {len(new_indices)} new offers to ChromaDB.")
+        else:
+            logger.info("ℹ️ No new offers to add. All are already present in ChromaDB.")
+
     except Exception as e:
         logger.error(f"Failed to push offers to ChromaDB: {e}")
+
+def print_existing_offers(collection_name="promotions"):
+    client = Client()
+    collection = client.get_or_create_collection(name=collection_name)
+
+    # peek() returns a dict of lists: 'ids', 'documents', 'metadatas'
+    items = collection.peek()
+
+    ids = items.get("ids", [])
+    documents = items.get("documents", [])
+    metadatas = items.get("metadatas", [])
+
+    print(f"Showing up to offers in collection '{collection_name}':")
+
+    for i in range(len(ids)):
+        print(f"\nOffer {i+1}:")
+        print(f"  ID: {ids[i]}")
+        print(f"  Text: {documents[i]}")
+        print(f"  Metadata: {metadatas[i]}")
