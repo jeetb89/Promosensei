@@ -1,0 +1,8 @@
+beautifulsoup4
+chromadb
+openai
+playwright
+python-dotenv
+slack-bolt
+validators
+numpy

@@ -4,11 +4,8 @@ import re
 import logging
 import traceback
 import unicodedata
-from embedding_utils import embed_text
 from typing import List, Dict
-from chromadb import Client
 from playwright.sync_api import sync_playwright, TimeoutError
-import hashlib
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -51,14 +48,6 @@ def extract_product_candidates(soup):
     return candidates
 
 def extract_discount(strings):
-    """
-    Look for discount percentage in the list of strings.
-    Examples:
-     - "20% OFF"
-     - "Save 15%"
-     - "Flat 30% discount"
-    Returns discount as a string like '20%' or '15%' or 'N/A' if not found.
-    """
     discount_pattern = re.compile(r'(\d{1,3})\s?%')
     for s in strings:
         match = discount_pattern.search(s)
@@ -189,80 +178,8 @@ def scrape_generic_offers(url: str, headful=False, screenshot_path=None):
                     seen.add(key)
 
             logger.info(f"Scraped {len(offers)} unique offers from {url}")
-            for offer in offers:
-                print("🔹", offer)
-            push_to_chroma(offers)
             return offers
         except Exception as e:
             logger.error(f"Failed to scrape {url}: {e}\n{traceback.format_exc()}")
         finally:
             browser.close()
-
-
-
-def push_to_chroma(offers: List[Dict], collection_name="promotions") -> None:
-    if not offers:
-        logger.warning("No offers to push to ChromaDB.")
-        return
-
-    try:
-        client = Client()
-        collection = client.get_or_create_collection(name=collection_name)
-
-        texts = []
-        metadatas = []
-        embeddings = []
-        ids = []
-
-        for offer in offers:
-            text = f"{offer['title']} from {offer['brand']} - Price: {offer['price']}, Discount: {offer['discount']}"
-            embedding = embed_text(text)
-            offer_id = hashlib.md5(f"{offer['title']}_{offer['price']}_{offer['link']}".encode()).hexdigest()
-
-            texts.append(text)
-            embeddings.append(embedding)
-            ids.append(offer_id)
-            metadatas.append({
-                "title": offer["title"],
-                "price": offer["price"],
-                "discount": offer["discount"],
-                "link": offer["link"],
-                "brand": offer["brand"],
-                "top_discount": offer["top_discount"]
-            })
-
-        existing = set(collection.get(ids=ids)["ids"])
-        new_indices = [i for i, doc_id in enumerate(ids) if doc_id not in existing]
-
-        if new_indices:
-            collection.add(
-                documents=[texts[i] for i in new_indices],
-                metadatas=[metadatas[i] for i in new_indices],
-                embeddings=[embeddings[i] for i in new_indices],
-                ids=[ids[i] for i in new_indices],
-            )
-            logger.info(f"✅ Added {len(new_indices)} new offers to ChromaDB.")
-        else:
-            logger.info("ℹ️ No new offers to add. All are already present in ChromaDB.")
-
-    except Exception as e:
-        logger.error(f"Failed to push offers to ChromaDB: {e}")
-
-def print_existing_offers(collection_name="promotions"):
-    client = Client()
-    collection = client.get_or_create_collection(name=collection_name)
-
-    # peek() returns a dict of lists: 'ids', 'documents', 'metadatas'
-    items = collection.peek()
-
-    ids = items.get("ids", [])
-    documents = items.get("documents", [])
-    metadatas = items.get("metadatas", [])
-
-    print(f"Showing up to offers in collection '{collection_name}':")
-
-    for i in range(len(ids)):
-        print(f"\nOffer {i+1}:")
-        print(f"  ID: {ids[i]}")
-        print(f"  Text: {documents[i]}")
-        print(f"  Metadata: {metadatas[i]}")
